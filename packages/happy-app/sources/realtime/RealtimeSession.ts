@@ -19,13 +19,36 @@ export async function startRealtimeSession(sessionId: string, initialContext?: s
     }
 
     // Request microphone permission before starting voice session
-    // Critical for iOS/Android - first session will fail without this
     const permissionResult = await requestMicrophonePermission();
     if (!permissionResult.granted) {
         showMicrophonePermissionDeniedAlert(permissionResult.canAskAgain);
         return;
     }
 
+    const voiceEngine = storage.getState().settings.voiceEngine;
+
+    // Gemini engine: no server token needed, API key is used client-side
+    if (voiceEngine === 'gemini') {
+        const geminiApiKey = storage.getState().settings.geminiApiKey;
+        if (!geminiApiKey) {
+            Modal.alert(t('common.error'), t('settingsVoice.geminiApiKeyRequired'));
+            return;
+        }
+
+        try {
+            currentSessionId = sessionId;
+            voiceSessionStarted = true;
+            await voiceSession.startSession({ sessionId, initialContext });
+        } catch (error) {
+            console.error('Failed to start Gemini session:', error);
+            currentSessionId = null;
+            voiceSessionStarted = false;
+            Modal.alert(t('common.error'), t('errors.voiceServiceUnavailable'));
+        }
+        return;
+    }
+
+    // ElevenLabs engine: existing flow
     const experimentsEnabled = storage.getState().settings.experiments;
     const agentId = __DEV__ ? config.elevenLabsAgentIdDev : config.elevenLabsAgentIdProd;
     
